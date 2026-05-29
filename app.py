@@ -53,6 +53,7 @@ def segmentar_ferida(img):
 
     hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
 
+    # Intervalo de cor para detectar áreas avermelhadas
     lower = np.array([0, 30, 30])
     upper = np.array([30, 255, 255])
 
@@ -60,8 +61,17 @@ def segmentar_ferida(img):
 
     kernel = np.ones((5, 5), np.uint8)
 
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    mask = cv2.morphologyEx(
+        mask,
+        cv2.MORPH_OPEN,
+        kernel
+    )
+
+    mask = cv2.morphologyEx(
+        mask,
+        cv2.MORPH_CLOSE,
+        kernel
+    )
 
     contours, _ = cv2.findContours(
         mask,
@@ -76,7 +86,10 @@ def calcular_medidas(contour, pixels_por_cm=37):
 
     area_pixels = cv2.contourArea(contour)
 
-    perimetro_pixels = cv2.arcLength(contour, True)
+    perimetro_pixels = cv2.arcLength(
+        contour,
+        True
+    )
 
     area_cm = area_pixels / (pixels_por_cm ** 2)
 
@@ -89,7 +102,13 @@ def desenhar_contorno(img, contour):
 
     output = img.copy()
 
-    cv2.drawContours(output, [contour], -1, (0, 255, 0), 4)
+    cv2.drawContours(
+        output,
+        [contour],
+        -1,
+        (0, 255, 0),
+        4
+    )
 
     return output
 
@@ -149,13 +168,21 @@ if pagina == "Nova Avaliação":
 
     st.title("Nova Avaliação de Ferida")
 
-    paciente = st.text_input("Nome do paciente")
+    paciente = st.text_input(
+        "Nome do paciente"
+    )
 
-    observacoes = st.text_area("Observações")
+    observacoes = st.text_area(
+        "Observações"
+    )
 
-    st.subheader("Captura da imagem")
+    st.subheader(
+        "Captura da imagem"
+    )
 
-    foto = st.camera_input("Fotografe a ferida")
+    foto = st.camera_input(
+        "Fotografe a ferida"
+    )
 
     upload = st.file_uploader(
         "Ou envie uma imagem",
@@ -172,81 +199,127 @@ if pagina == "Nova Avaliação":
 
     if imagem_final:
 
-        image = Image.open(imagem_final)
+        try:
 
-        img = np.array(image)
+            # =========================
+            # LEITURA SEGURA DA IMAGEM
+            # =========================
 
-        st.image(img, caption="Imagem Original")
+            image = Image.open(
+                imagem_final
+            ).convert("RGB")
 
-        mask, contours = segmentar_ferida(img)
+            img = np.array(image)
 
-        st.subheader("Segmentação")
-
-        st.image(mask)
-
-        if contours:
-
-            maior_contorno = max(contours, key=cv2.contourArea)
-
-            area_cm, perimetro_cm = calcular_medidas(
-                maior_contorno
-            )
-
-            imagem_contorno = desenhar_contorno(
+            st.image(
                 img,
-                maior_contorno
+                caption="Imagem Original",
+                use_container_width=True
             )
 
-            col1, col2 = st.columns(2)
+            # =========================
+            # SEGMENTAÇÃO
+            # =========================
 
-            with col1:
-                st.image(
-                    imagem_contorno,
-                    caption="Ferida Detectada"
+            mask, contours = segmentar_ferida(img)
+
+            st.subheader("Segmentação")
+
+            st.image(
+                mask,
+                caption="Máscara da Ferida",
+                use_container_width=True
+            )
+
+            if len(contours) > 0:
+
+                maior_contorno = max(
+                    contours,
+                    key=cv2.contourArea
                 )
 
-            with col2:
-                st.metric(
-                    "Área estimada (cm²)",
-                    round(area_cm, 2)
+                area_cm, perimetro_cm = calcular_medidas(
+                    maior_contorno
                 )
 
-                st.metric(
-                    "Perímetro estimado (cm)",
-                    round(perimetro_cm, 2)
+                imagem_contorno = desenhar_contorno(
+                    img,
+                    maior_contorno
                 )
 
-            if st.button("Salvar Avaliação"):
+                col1, col2 = st.columns(2)
 
-                nome_arquivo = (
-                    f"{datetime.now().timestamp()}.png"
+                with col1:
+
+                    st.image(
+                        imagem_contorno,
+                        caption="Ferida Detectada",
+                        use_container_width=True
+                    )
+
+                with col2:
+
+                    st.metric(
+                        "Área estimada (cm²)",
+                        round(area_cm, 2)
+                    )
+
+                    st.metric(
+                        "Perímetro estimado (cm)",
+                        round(perimetro_cm, 2)
+                    )
+
+                # =========================
+                # SALVAR
+                # =========================
+
+                if st.button(
+                    "Salvar Avaliação"
+                ):
+
+                    nome_arquivo = (
+                        f"{datetime.now().timestamp()}.png"
+                    )
+
+                    caminho = os.path.join(
+                        UPLOAD_FOLDER,
+                        nome_arquivo
+                    )
+
+                    cv2.imwrite(
+                        caminho,
+                        cv2.cvtColor(
+                            img,
+                            cv2.COLOR_RGB2BGR
+                        )
+                    )
+
+                    salvar_dados(
+                        paciente,
+                        datetime.now().strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        ),
+                        caminho,
+                        area_cm,
+                        perimetro_cm,
+                        observacoes
+                    )
+
+                    st.success(
+                        "Avaliação salva com sucesso"
+                    )
+
+            else:
+
+                st.error(
+                    "Nenhuma ferida detectada"
                 )
 
-                caminho = os.path.join(
-                    UPLOAD_FOLDER,
-                    nome_arquivo
-                )
+        except Exception as e:
 
-                cv2.imwrite(
-                    caminho,
-                    cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-                )
-
-                salvar_dados(
-                    paciente,
-                    datetime.now().strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    ),
-                    caminho,
-                    area_cm,
-                    perimetro_cm,
-                    observacoes
-                )
-
-                st.success("Avaliação salva com sucesso")
-
-        else:
-            st.error("Nenhuma ferida detectada")
+            st.error(
+                f"Erro ao processar imagem: {e}"
+            )
 
 # =========================
 # HISTÓRICO
@@ -254,16 +327,23 @@ if pagina == "Nova Avaliação":
 
 elif pagina == "Histórico":
 
-    st.title("Histórico de Avaliações")
+    st.title(
+        "Histórico de Avaliações"
+    )
 
     dados = carregar_dados()
 
     if len(dados) == 0:
-        st.warning("Nenhuma avaliação encontrada")
+
+        st.warning(
+            "Nenhuma avaliação encontrada"
+        )
 
     else:
 
-        pacientes = dados["paciente"].unique()
+        pacientes = dados[
+            "paciente"
+        ].unique()
 
         paciente_escolhido = st.selectbox(
             "Selecione o paciente",
@@ -285,14 +365,34 @@ elif pagina == "Histórico":
             col1, col2 = st.columns([1, 1])
 
             with col1:
-                st.image(row["imagem"])
+
+                if os.path.exists(row["imagem"]):
+
+                    st.image(
+                        row["imagem"],
+                        use_container_width=True
+                    )
+
+                else:
+
+                    st.warning(
+                        "Imagem não encontrada"
+                    )
 
             with col2:
-                st.write(f"Data: {row['data']}")
-                st.write(f"Área: {round(row['area_cm'], 2)} cm²")
+
+                st.write(
+                    f"Data: {row['data']}"
+                )
+
+                st.write(
+                    f"Área: {round(row['area_cm'], 2)} cm²"
+                )
+
                 st.write(
                     f"Perímetro: {round(row['perimetro'], 2)} cm"
                 )
+
                 st.write(
                     f"Observações: {row['observacoes']}"
                 )
@@ -303,27 +403,44 @@ elif pagina == "Histórico":
 
 elif pagina == "Dashboard":
 
-    st.title("Dashboard de Evolução")
+    st.title(
+        "Dashboard de Evolução"
+    )
 
     dados = carregar_dados()
 
     if len(dados) == 0:
-        st.warning("Nenhum dado encontrado")
+
+        st.warning(
+            "Nenhum dado encontrado"
+        )
 
     else:
 
-        pacientes = dados["paciente"].unique()
+        pacientes = dados[
+            "paciente"
+        ].unique()
 
         paciente = st.selectbox(
             "Paciente",
             pacientes
         )
 
-        df = dados[dados["paciente"] == paciente]
+        df = dados[
+            dados["paciente"] == paciente
+        ].copy()
 
-        df["data"] = pd.to_datetime(df["data"])
+        df["data"] = pd.to_datetime(
+            df["data"]
+        )
 
-        df = df.sort_values(by="data")
+        df = df.sort_values(
+            by="data"
+        )
+
+        # =========================
+        # GRÁFICO ÁREA
+        # =========================
 
         fig = px.line(
             df,
@@ -333,25 +450,76 @@ elif pagina == "Dashboard":
             title="Evolução da Área da Ferida"
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+        # =========================
+        # GRÁFICO PERÍMETRO
+        # =========================
+
+        fig2 = px.line(
+            df,
+            x="data",
+            y="perimetro",
+            markers=True,
+            title="Evolução do Perímetro"
+        )
+
+        st.plotly_chart(
+            fig2,
+            use_container_width=True
+        )
+
+        # =========================
+        # ANÁLISE
+        # =========================
 
         if len(df) >= 2:
 
-            area_inicial = df.iloc[0]["area_cm"]
-            area_final = df.iloc[-1]["area_cm"]
+            area_inicial = df.iloc[0][
+                "area_cm"
+            ]
+
+            area_final = df.iloc[-1][
+                "area_cm"
+            ]
 
             variacao = (
-                (area_inicial - area_final)
+                (
+                    area_inicial - area_final
+                )
                 / area_inicial
             ) * 100
 
+            st.subheader(
+                "Evolução"
+            )
+
             if variacao > 0:
+
                 st.success(
                     f"Redução de {round(variacao, 2)}%"
                 )
-            else:
+
+            elif variacao < 0:
+
                 st.error(
                     f"Aumento de {round(abs(variacao), 2)}%"
                 )
 
-        st.dataframe(df)
+            else:
+
+                st.info(
+                    "Sem alteração"
+                )
+
+        st.subheader(
+            "Tabela de Dados"
+        )
+
+        st.dataframe(
+            df,
+            use_container_width=True
+        )

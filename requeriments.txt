@@ -1,0 +1,6 @@
+streamlit
+pandas
+numpy
+cv2
+sqlalchemy
+express

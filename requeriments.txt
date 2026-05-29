@@ -1,6 +1,6 @@
 streamlit
 pandas
 numpy
-cv2
+opencv-python
 sqlalchemy
 express
